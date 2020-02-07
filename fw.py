@@ -4,17 +4,42 @@ import argparse
 import os
 import requests
 import shlex
+import shutil
 import subprocess
 import sys 
 
 DEBUG = False
 
-def CheckSudo():
-    ret = 0
-    if os.geteuid() != 0:
-        msg = "[sudo] password for %u:"
-        ret = subprocess.check_call("sudo -v -p '%s'" % msg, shell=True)
-    return ret
+class bcolors:
+    red='\033[91m'
+    green='\033[92m'
+    blue='\033[94m'
+    yellow='\033[93m'
+    white='\033[97m'
+    cyan='\033[96m'
+    endc='\033[0m' 
+
+def Msg(msg="",type="OK"):
+    #define colors
+    red='\033[91m'
+    green='\033[92m'
+    blue='\033[94m'
+    yellow='\033[93m'
+    white='\033[97m'
+    cyan='\033[96m'
+    endc='\033[0m'
+    
+    
+    if type == "ERROR":
+        print(f"[{red}Error{endc}]: {msg}")
+    elif type == "RUN":
+        print(f"{blue} ==> {endc} {msg}")
+    elif type == "WARN":
+        print(f"[{yellow}Error{endc}]: {msg}")
+    elif type == "OK":
+        print(f"[{green} OK {endc}]: {msg}")
+    else:
+        print(f"{white}{msg}{endc}")
 
 def CheckPublicIP():
 
@@ -37,8 +62,8 @@ def GetLocalIP():
         cp =  subprocess.check_output([cmd],shell=True,encoding='UTF-8')
         return cp.split('/')[0]
     except Exception as e:
-        print("Falied to get local ip address")
-        print(e)
+        Msg("Falied to get local ip address","ERROR")
+        Msg(e,"ERROR")
         return 0
 
 def SetDefaultRules():
@@ -66,35 +91,34 @@ def SetDefaultRules():
     
     for rule in defaultrules.splitlines():
         if not RunRule(rule.strip()):
-            print("Default Rules Not Set")
+            Msg("Default Rules Not Set","ERROR")
             return False
            
-    print("Default Rules Set")
+    Msg("Default Rules Set")
     return True
    
 def PrintRules():
-    IPT = 'sudo /usr/sbin/iptables '
+    IPT = '/usr/sbin/iptables '
     cmds = ['-nvL','-nvL -t nat']
     for cmd in cmds:
         try:
-            print(subprocess.check_output([IPT + cmd],shell=True).decode('utf-8'))
-            
+            Msg(subprocess.check_output([IPT + cmd],shell=True).decode('utf-8'),"OUT")
         except subprocess.CalledProcessError as e:            
-            print("Error Getting Rules: {}".format(e))
+            Msg("Error Getting Rules: {}".format(e),"ERROR")
             return False
 
-def RunRule(cmd,IPT = 'sudo /usr/sbin/iptables '):
+def RunRule(cmd,IPT = '/usr/sbin/iptables '):
     if DEBUG:
         cmd = IPT + cmd
         print("DEBUG: {}".format(cmd))
     else:
         try:
             cmd = IPT + cmd
-            cp = subprocess.check_call([cmd],shell=True)
+            subprocess.run([cmd],shell=True,check=True)
             return True
 
         except subprocess.CalledProcessError as e:            
-            print("Error Setting Rule: {}".format(cmd))
+            Msg("Error Setting Rule: {}".format(cmd),"ERROR")
             return False
 
 def IptablesRules(ip,action="I",interface='eth0'):
@@ -106,10 +130,9 @@ def IptablesRules(ip,action="I",interface='eth0'):
             direction = item[0]
             item = item[1:]
         
-        print("Direction: {}, {}".format(direction,item))
         ips = item.split(":",1)
         if len(ips) > 2: 
-            print("ERROR: unknown string {}".format(ips))
+            Msg("unknown string {}".format(ips),"ERROR")
         elif len(ips) == 1:
             #Handle only ips
             if direction in [ ">",'b']:
@@ -140,9 +163,9 @@ def IptablesRules(ip,action="I",interface='eth0'):
                         cmd = "-{} OUTPUT -o {} -p tcp --dport {} -j ACCEPT".format(action,interface,port)
                         RunRule(cmd)
             else: 
-                print("ERROR: Unkown Specification")                
+                Msg("Unkown Specification","ERROR")                
         else: 
-            print("ERROR: Unknown Value")
+            Msg("Unknown Value","ERROR")
             return False
 
 def FlushRules():
@@ -158,12 +181,60 @@ def FlushRules():
 
     for rule in rules.splitlines():
         if not RunRule(rule.strip()):
-            print("Error Flushin Rules")
+            Msg("Error Flushin Rules","ERROR")
             return False
            
-    print("Rules Flushed.")
+    Msg("Rules Flushed.")
     return True
 
+
+def SetForTor(action='start'):
+    
+    trans_port="9040"
+    dns_port="5353"
+    virtual_address="10.192.0.0/10"
+
+    # LAN destinations that shouldn't be routed through Tor
+    non_tor="127.0.0.0/8 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16"
+    
+    torrc_file = '/etc/tor/torrc'
+    torrc =f'''VirtualAddrNetworkIPv4 {virtual_address}
+    AutomapHostsOnResolve 1
+    TransPort {trans_port} IsolateClientAddr IsolateClientProtocol IsolateDestAddr IsolateDestPort
+    SocksPort 9050
+    DNSPort {dns_port}
+    '''
+    if action == 'start':
+        try:
+            Msg("Copying torrc to /tmp/torrc_orig","RUN")
+            shutil.copyfile(torrc_file,'/tmp/torrc_orig')
+        except Exception as e:
+            Msg("Couldn't backing up torrc ... exiting","ERROR")
+            Msg("\t{e}","ERROR")
+            return False
+        try:
+            Msg("Writing tor options")
+            with open(torrc_file,'a') as tfile:
+                tfile.write(torrc)
+        except Exception as e:
+            Msg("Couldn't write options ... exiting","ERROR")
+            Msg("\t{e}","ERROR")
+
+        Msg("Tor Setup complete")
+        return True
+    elif action == 'stop':
+        try:
+            Msg("Restoring torrc from /tmp/torrc_orig","RUN")
+            shutil.move('/tmp/torrc_orig', torrc_file)
+        except:
+            Msg("Couldn't restore original torrc","ERROR")
+
+        Msg("Tor Restoration complete")
+        return True
+    else:
+        return False
+
+'''
 def SetForTor(action='start'):
     if action=='start':
         cmd = ["sudo","kalitorify","-t"]
@@ -185,7 +256,7 @@ def SetForTor(action='start'):
         print(e)
         SetDefaultRules()
         return False
-
+'''
 
 if __name__ == '__main__':
     #Check if sudo 
@@ -200,11 +271,10 @@ if __name__ == '__main__':
     parser.add_argument('-T','--starttor',action='store_true', help='Start Kalitorify')
     parser.add_argument('-X','--stoptor',action='store_true', help='Stop Kalitorify')
     args = parser.parse_args()
-    if os.name != 'nt':
-        if CheckSudo() != 0:
-            print("Run with root")
-            sys.exit()
-        else:
+    if os.geteuid() != 0:
+        subprocess.call(['sudo', 'python3', *sys.argv])
+        sys.exit()
+    else:
             pass
 
     if args.add:
