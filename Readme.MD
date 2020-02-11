@@ -16,13 +16,12 @@ optional arguments:
   -h, --help            show this help message and exit
   -A ADD [ADD ...], --add ADD [ADD ...]
                         Allow IP IP:PORT :PORT through firewall,
-  -B BLOCK [BLOCK ...], --block BLOCK [BLOCK ...]
   -D DELETE [DELETE ...], --delete DELETE [DELETE ...]
   -F, --flush           Flush and Accept All
   -P, --print           Print Firewall Rules
   -R, --reset           reset default rules
-  -T, --starttor        Start Kalitorify
-  -X, --stoptor         Stop Kalitorify```
+  -T, --starttor        Start TOR as transparent proxy
+  -X, --stoptor         Stop TOR as transparent proxy```
 
 ```
 

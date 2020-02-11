@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import sys 
 
+
 def Msg(msg="",type="OK"):
     #define colors
     red='\033[91m'
@@ -135,9 +136,11 @@ def RunRule(cmd,IPT = '/usr/sbin/iptables '):
         return False
 
 def Add(ip,interface='eth0'):
+    '''Helper Function to make adding rule easier'''
     IptablesRules(ip,action="I",interface=interface)
 
 def Remove(ip,interface='eth0'):
+    '''Helper Function to make adding rule easier'''
     IptablesRules(ip,action="D",interface=interface)
 
 
@@ -150,12 +153,13 @@ def IptablesRules(ip,action="I",interface='eth0'):
     
     Parameters
     ----------
-        ip : list
-            list containing IP:port combinations to add
-        action: str
-            Iptables Action [I = Insert], D = Delete, A = ADD
-        interface : str
-            Network interface to apply rule to
+    ip : list
+        list containing IP:port combinations to add
+    action : str
+        Iptables Action [I = Insert], D = Delete, A = ADD
+    interface : str
+        Network interface to apply rule to
+    
     Returns
     -------
         bool
@@ -210,6 +214,14 @@ def IptablesRules(ip,action="I",interface='eth0'):
         return True
 
 def FlushRules():
+    '''Flushes iptables Rules and Sets all to ACCEPT
+    
+    Returns
+    -------
+    bool 
+        True if Successful, False if error. 
+    '''
+
     rules = '''-P INPUT ACCEPT
                -P FORWARD ACCEPT
                -P OUTPUT ACCEPT
@@ -228,8 +240,25 @@ def FlushRules():
     Msg("Rules Flushed.")
     return True
 
-def SetTorRules(virtual_address,trans_port,dns_port):
-    
+def SetTorRules(virtual_address,trans_port,dns_port,control_port=None):
+    '''Sets iptables rules needed for tor transparent proxy
+    [TODO]: Use Control Port to determine bridge IP address and explicitly allow outbound. 
+
+    Parameters
+    ----------
+    virtual_address : str
+        String <ip/cidr> containing the virtual address for the tor connection (VirtualAddrNetworkIPv4 in torrc)
+    trans_port : str
+        String containing TransPort from torrc
+    dns_port : str
+        String containing TOR DNS_port from torrc
+
+    Returns
+    -------
+    bool 
+        True if successful, False if not 
+    '''
+
     not_tor="127.0.0.0/8,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
     tor_uid  =subprocess.run(['id','-u','debian-tor'],capture_output=True,encoding='utf-8').stdout.strip()
     
@@ -270,22 +299,20 @@ def SetTorRules(virtual_address,trans_port,dns_port):
     Msg("TOR Iptables Rules Set")
     return True
 
-def CheckTorStatus():
-    
-
-    # Check status of tor.service
-    # ===========================
-    Msg("Checking current status of Tor service","RUN")
-    cp = subprocess.run(['systemctl','is-active','tor.service'],capture_output=True,check=True)
-    if not cp.returncode:
-        Msg("Tor Service is running","OK")
-        return True
-    else:
-        Msg("Tor Service is not running","ERROR")
-        return False
-   
 def StartTor(torrc=None):
-    
+    ''' Configures system as a transparent TOR proxy. 
+
+    Parameter
+    ---------
+    torrc : str
+        custom torrc file to use
+
+    Returns
+    -------
+    bool 
+        True if successful, False if Error
+    '''
+
     Msg("Stopping Tor Service","RUN")
     subprocess.run(['systemctl','stop','tor.service'],capture_output=True)
     
@@ -312,6 +339,7 @@ def StartTor(torrc=None):
         trans_port="9040"
         dns_port="5353"
         virtual_address="10.192.0.0/10"
+
         torrc =f'''VirtualAddrNetworkIPv4 {virtual_address}
         AutomapHostsOnResolve 1
         TransPort {trans_port} IsolateClientAddr IsolateClientProtocol IsolateDestAddr IsolateDestPort
@@ -351,15 +379,29 @@ def StartTor(torrc=None):
         Msg("Error Configuring TOR iptables")
         
     
-    #check_status 
-    if CheckTorStatus():
+    #check Tor Status status 
+    Msg("Checking current status of Tor service","RUN")
+    cp = subprocess.run(['systemctl','is-active','tor.service'],capture_output=True,check=True)
+    if not cp.returncode:
+        Msg("Tor Service is running","OK")
         CheckPublicIP()
         Msg("Transparent Proxy activated, your system is under Tor")
         return True
     else:
+        Msg("Tor Service is not running","ERROR")
         return False
+    
+    
+    return False
 
 def StopTor():        
+    '''Stops TOR service and resets things to previous settings
+
+    Returns
+    -------
+    bool
+        True if successful, False if failure
+    '''
 
     Msg("Stopping TOR Service","RUN")
     cp = subprocess.run(['systemctl','stop','tor.service'],check=True,capture_output=True)
@@ -388,9 +430,8 @@ def StopTor():
     Msg("Transparent Proxy stopped")
     return True
     
-
 if __name__ == '__main__':
-    #Check if sudo 
+
     parser = argparse.ArgumentParser()
     parser.add_argument('-A','--add', nargs='+',help="Allow IP IP:PORT :PORT through firewall, ")
     parser.add_argument('-D','--delete', nargs='+')
@@ -403,6 +444,7 @@ if __name__ == '__main__':
     parser.add_argument('-t','--torrc', default=None, help='Custom torrc file')
     parser.add_argument('-X','--stoptor',action='store_true', help='Stop Kalitorify')
     args = parser.parse_args()
+    #sudo check 
     if os.geteuid() != 0:
         subprocess.call(['sudo', 'python3', *sys.argv])
         sys.exit()
