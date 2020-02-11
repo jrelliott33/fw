@@ -10,6 +10,20 @@ import sys
 
 
 def Msg(msg="",type="OK"):
+    '''Msg Helpder function to print pretty colored output
+
+    Parameters
+    ----------
+    msg : str
+        Message to print
+    type : str
+        Type of message to print, defines formatting
+
+    Returns
+    -------
+    None
+    '''
+
     #define colors
     red='\033[91m'
     green='\033[92m'
@@ -32,6 +46,15 @@ def Msg(msg="",type="OK"):
         print(f"{white}{msg}{endc}")
 
 def CheckPublicIP():
+    '''Gets public ip from list of urls, stopping at the first 200 response. 
+
+    Returns
+    -------
+    str
+        Returns response for url service
+    '''
+        
+
     urllist = [ 'http://ip-api.com/',
                 'https://ipinfo.io/',
                 'https://api.myip.com/',
@@ -71,6 +94,18 @@ def GetLocalIP(interface='eth0'):
         return 0
 
 def SetDefaultRules():
+    '''Sets default iptables rules
+    
+    Parameters
+    ----------
+    None
+
+    Returns
+    -------
+    bool 
+        True if successful, False if not 
+    '''
+
     localip = GetLocalIP()
     defaultrules = '''-F
                     -X
@@ -102,6 +137,18 @@ def SetDefaultRules():
     return True
    
 def PrintRules():
+    '''Sets default iptables rules
+    
+    Parameters
+    ----------
+    None
+
+    Returns
+    -------
+    bool 
+        True if successful, False if not 
+    '''
+
     IPT = '/usr/sbin/iptables '
     cmds = ['-nvL','-nvL -t nat']
     for cmd in cmds:
@@ -142,7 +189,6 @@ def Add(ip,interface='eth0'):
 def Remove(ip,interface='eth0'):
     '''Helper Function to make adding rule easier'''
     IptablesRules(ip,action="D",interface=interface)
-
 
 def IptablesRules(ip,action="I",interface='eth0'):
     '''Takes a list of ip:port combinations, parses them and runs 
